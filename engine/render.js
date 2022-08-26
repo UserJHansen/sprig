@@ -1,24 +1,15 @@
 import { bitmapTextToImageData } from "./bitmap.js";
 
-const spritesheetIndex = 0;
-const texIndex = 1;
-let backgroundTile = 0;
-let gl,              texLocation,
-                  texResLocation,
-             spritesheetLocation,
-          backgroundTileLocation,
-    spritesheetTileCountLocation;
+// const spritesheetIndex = 0;
+// const texIndex = 1;
+// let gl,              texLocation,
+//                   texResLocation,
+//              spritesheetLocation,
+//     spritesheetTileCountLocation;
 
 const SPRITESHEET_TILE_COUNT = 64;
 
-let _bitmaps;
-export function setBackground(bg) {
-  backgroundTile = 1+_bitmaps.findIndex(f => f[0] == bg);
-}
-
 export function setBitmaps(bitmaps) {
-  _bitmaps = bitmaps;
-
   const sw = 16 * SPRITESHEET_TILE_COUNT;
   const sh = 16 * SPRITESHEET_TILE_COUNT;
   const spritesheet = new ImageData(sw, sh);
@@ -34,131 +25,95 @@ export function setBitmaps(bitmaps) {
         spritesheet.data[(sy*sw + sx)*4 + 3] = data[(y*16 + x)*4 + 3];
       }
   }
-  uploadImage(spritesheet, spritesheetIndex);
+
+  uniforms.u_spritesheet.value.source.data = spritesheet;
+  uniforms.u_spritesheet.value.flipY = false;
+  uniforms.u_spritesheet.value.magFilter = THREE.NearestFilter;
+  uniforms.u_spritesheet.value.minFilter = THREE.NearestFilter;
+  uniforms.u_spritesheet.value.source.needsUpdate = true;
+  uniforms.u_spritesheet.value       .needsUpdate = true;
 }
 
+const uniforms = {
+  u_tex                    : { value: new THREE.Texture(new ImageData(1, 1)) },
+  u_spritesheet            : { value: new THREE.Texture(new ImageData(1, 1)) },
+  u_spritesheet_tile_count : { value: SPRITESHEET_TILE_COUNT },
+  u_texres                 : { value: [0, 0] },
+};
+
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer();
+let camera, cube;
+
+
 export function init(canvas) {
-  gl = canvas.getContext('webgl2');//, { alpha: false });
+  /* slurp all we need out this mf then delete */
+  canvas.parentElement.appendChild( renderer.domElement );
+  const { width, height } = canvas.parentElement.getBoundingClientRect()
+  canvas.remove();
 
-  const program = createProgram(glsl['shader-vertex'], glsl['shader-fragment']);
-  gl.useProgram(program);
+  renderer.setSize(width, height);
 
-  texLocation = gl.getUniformLocation(program, "u_tex");
-  texResLocation = gl.getUniformLocation(program, "u_texres");
-  spritesheetLocation = gl.getUniformLocation(program, "u_spritesheet");
-  backgroundTileLocation = gl.getUniformLocation(program, "u_background_tile");
-  spritesheetTileCountLocation = gl.getUniformLocation(program, "u_spritesheet_tile_count");
-  resize(canvas);
+  camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
 
-  function createShader(source, type) {
-    var shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
-      throw new Error(gl.getShaderInfoLog(shader));
-    return shader;
-  }
+  const geometry = new THREE.BoxGeometry( 3, 3, 3 );
+  const material = new THREE.ShaderMaterial( {
+    uniforms,
+    vertexShader: glsl['shader-vertex'],
+    fragmentShader: glsl['shader-fragment'],
 
-  function createProgram(vertex, fragment) {
-    var program = gl.createProgram();
-    gl.attachShader(program, createShader(vertex, gl.VERTEX_SHADER));
-    gl.attachShader(program, createShader(fragment, gl.FRAGMENT_SHADER));
-    gl.linkProgram(program);
-    
-    program.createUniform = function (type, name) {
-      var location = gl.getUniformLocation(program, name);
-      return function (v1, v2, v3, v4) {
-        gl['uniform' + type](location, v1, v2, v3, v4);
-      }
-    };
+    // vertexShader: `
+    // varying vec2 vUv;
 
-    const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    // void main(void) {
+    //   vUv = uv;
+    //   gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    // }`,
 
-    const positions = [
-      0, 0,
-      4, 0,
-      0, 4,
-      4, 4
-    ];
+    // fragmentShader: `
+    // uniform sampler2D map;
 
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-    gl.enableVertexAttribArray(positionAttributeLocation);
+    // varying vec2 vUv;
 
-    const size = 2;          // 2 components per iteration
-    const type = gl.FLOAT;   // the data is 32bit floats
-    const normalize = false; // don't normalize the data
-    const stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-    const offset = 0;        // start at the beginning of the buffer
-    gl.vertexAttribPointer(
-        positionAttributeLocation, size, type, normalize, stride, offset)
+    // void main(void) {
+    //   gl_FragColor = texture2D(map, vUv);
+    //   // gl_FragColor = vec4(vUv, 0, 1);
+    // }
+    // `
+  } );
 
-    return program;
-  }
+  cube = new THREE.Mesh( geometry, material );
+  scene.add( cube );
+
+  camera.position.z = 5;
 }
 
 export function resize(canvas) {
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  // renderer.setSize(canvas.width, height);
 }
 
 export function render(canvas) {
-  uploadImage(canvas, texIndex, gl.NEAREST);
+  cube.rotation.x += 0.01;
+  cube.rotation.y += 0.01;
 
-  gl.uniform1i(backgroundTileLocation, backgroundTile);
-  gl.uniform1i(spritesheetLocation,    spritesheetIndex);
-  gl.uniform1i(texLocation,            texIndex);
-  gl.uniform2f(texResLocation, canvas.width, canvas.height);
-  gl.uniform1i(spritesheetTileCountLocation, SPRITESHEET_TILE_COUNT);
+  uniforms.u_texres.value = [canvas.width, canvas.height];
+  uniforms.u_tex.value.source.data = canvas;
+  uniforms.u_tex.value.magFilter = THREE.NearestFilter;
+  uniforms.u_tex.value.minFilter = THREE.NearestFilter;
+  uniforms.u_tex.value.flipY = false;
+  uniforms.u_tex.value.source.needsUpdate = true;
+  uniforms.u_tex.value       .needsUpdate = true;
 
-  gl.drawArrays(gl.TRIANGLE_FAN, 0, 3);
-}
-
-function uploadImage(image, i, sample=gl.NEAREST) {
-  // Create a texture.
-  var texture = gl.createTexture();
- 
-  // make unit 0 the active texture unit
-  // (i.e, the unit all other texture commands will affect.)
-  gl.activeTexture(gl.TEXTURE0 + i);
- 
-  // Bind texture to 'texture unit '0' 2D bind point
-  gl.bindTexture(gl.TEXTURE_2D, texture);
- 
-  // Set the parameters so we don't need mips and so we're not filtering
-  // and we don't repeat
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, sample);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, sample);
- 
-  // Upload the image into the texture.
-  var mipLevel = 0;               // the largest mip
-  var internalFormat = gl.RGBA;   // format we want in the texture
-  var srcFormat = gl.RGBA;        // format of data we are supplying
-  var srcType = gl.UNSIGNED_BYTE  // type of data we are supplying
-  gl.texImage2D(gl.TEXTURE_2D,
-                mipLevel,
-                internalFormat,
-                srcFormat,
-                srcType,
-                image);
+  renderer.render( scene, camera );
 }
 
 const glsl = {
-  'shader-fragment': `#version 300 es
-precision highp float;
-
+  'shader-fragment': `
 uniform sampler2D u_tex;
 uniform sampler2D u_spritesheet;
 uniform int u_spritesheet_tile_count;
-uniform int u_background_tile;
 uniform vec2 u_texres;
 in vec2 texCoord;
-
-out vec4 frag;
 
 vec4 sampleTile(vec2 coord, float index) {
   // this index is sometimes wrong because of floating point math
@@ -178,35 +133,26 @@ void main(void) {
   vec2 coord = vec2(texCoord.x, 1.0 - texCoord.y);
   vec4 raw = texture(u_tex, coord);
 
-  frag = vec4(1);
+  // gl_FragColor = vec4(texture(u_tex, coord).rgb * 255.0f, 1); // vec4(1);
+  gl_FragColor = vec4(1);
   vec4 sprite;
   sprite = sampleTile(coord, raw.a); 
-  if (sprite.a > 0.0) frag = vec4(sprite.xyz, 1);
+  if (sprite.a > 0.0) gl_FragColor = vec4(sprite.xyz, 1);
   sprite = sampleTile(coord, raw.b); 
-  if (sprite.a > 0.0) frag = vec4(sprite.xyz, 1);
+  if (sprite.a > 0.0) gl_FragColor = vec4(sprite.xyz, 1);
   sprite = sampleTile(coord, raw.g); 
-  if (sprite.a > 0.0) frag = vec4(sprite.xyz, 1);
+  if (sprite.a > 0.0) gl_FragColor = vec4(sprite.xyz, 1);
   sprite = sampleTile(coord, raw.r); 
-  if (sprite.a > 0.0) frag = vec4(sprite.xyz, 1);
-  sprite = sampleTile(coord, float(u_background_tile)/255.0f);
-  if (sprite.a > 0.0) frag = vec4(sprite.xyz, 1);
+  if (sprite.a > 0.0) gl_FragColor = vec4(sprite.xyz, 1);
+
 }
   `,
-  'shader-vertex': `#version 300 es
-
-precision highp float;
-in vec2 a_position;
+  'shader-vertex': `
 out vec2 texCoord;
 
 void main(void) {
-    // float x = float((gl_VertexID & 1) << 2);
-    // float y = float((gl_VertexID & 2) << 1);
-
-    float x = a_position.x;
-    float y = a_position.y;
-    texCoord.x = x * 0.5;
-    texCoord.y = y * 0.5;
-    gl_Position = vec4(x - 1.0, y - 1.0, 0, 1);
+  texCoord = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
 }
   `,
 };
