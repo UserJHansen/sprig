@@ -65,7 +65,7 @@ const ACTIONS = {
     setTimeout(() => {
       state.shareLinkState = "idle";
       dispatch("RENDER");
-    }, 3000);
+    }, 1000);
 
     fetch("https://misguided.enterprises/clubscraps/cabal", {
       method: "POST",

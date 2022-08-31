@@ -77,7 +77,8 @@ body {
   cursor: pointer;
 }
 
-.menu-item:not(.run):not(.menu-spacer):hover {
+.menu-item:not(.run):not(.menu-spacer):hover,
+.menu-item.visible {
   background: var(--pcb-trace);
 }
 
@@ -140,7 +141,10 @@ body {
   width: 100%;
 }
 
-.dropdown-container:hover .dropdown-list, .popout-container:hover .popout-list {
+.dropdown-container:hover .dropdown-list,
+.popout-container:hover .popout-list,
+.dropdown-container.visible .dropdown-list,
+.popout-container.visible .popout-list {
   visibility: visible;
 }
 
@@ -150,14 +154,6 @@ body {
   position: relative;
   display: flex;
   overflow: hidden;
-}
-
-.menu-item.stale {
-  background: var(--pcb-trace);
-}
-
-.menu-item.stale:hover {
-  background: var(--pcb-trace-lighter);
 }
 
 .code-container {
